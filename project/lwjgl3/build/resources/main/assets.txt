@@ -1,0 +1,5 @@
+bg.png
+branch.png
+fire_animated.png
+player_walk_sheet.png
+tree.png
