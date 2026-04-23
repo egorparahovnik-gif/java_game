@@ -12,17 +12,22 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
+import com.badlogic.gdx.utils.viewport.ExtendViewport;
+import com.badlogic.gdx.utils.viewport.Viewport;
 
 public class Main extends ApplicationAdapter {
 
     SpriteBatch batch;
     OrthographicCamera camera;
+    Viewport viewport;
 
-    Texture walkSheet, fireSheet, treeTexture, bgTexture, branchTexture;
+    Texture walkSheet, fireSheet, treeTexture, bgTexture, branchTexture, fireOffTexture, grassTexture;
     Animation<TextureRegion> walkAnimation;
     Animation<TextureRegion> fireAnimation;
+    Animation<TextureRegion> fireOffAnimation;
     TextureRegion[] walkFrames;
     TextureRegion[] fireFrames;
+    TextureRegion[] fireOffFrames;
 
     float playerX, playerY;
     float stateTime;
@@ -32,10 +37,15 @@ public class Main extends ApplicationAdapter {
 
     float fireHealth = 100f;
     int woodCount = 0;
+    int carriedWood = 0;
+    int maxWood = 5;
+    float branchRespawnTimer = 0f;
+    float BRANCH_RESPAWN_TIME = 60f;
     boolean isGameOver = false;
 
     Array<Tree> trees;
     Array<Branch> branches;
+    Array<Grass> grasses;
 
     int TILE_SIZE = 16;
     int MAP_WIDTH = 100;
@@ -52,7 +62,8 @@ public class Main extends ApplicationAdapter {
         batch = new SpriteBatch();
 
         camera = new OrthographicCamera();
-        camera.setToOrtho(false, 960, 720);
+        viewport = new ExtendViewport(960, 720, camera);
+        viewport.apply();
 
         walkSheet = new Texture("player_walk_sheet.png");
         int frameWidth = walkSheet.getWidth() / 6;
@@ -77,6 +88,17 @@ public class Main extends ApplicationAdapter {
         bgTexture = new Texture("bg.png");
         treeTexture = new Texture("tree.png");
         branchTexture = new Texture("branch.png");
+        fireOffTexture = new Texture("fire_off.png");
+        grassTexture = new Texture("grass.png");
+
+        int offWidth = fireOffTexture.getWidth() / 6;
+        int offHeight = fireOffTexture.getHeight();
+
+        fireOffFrames = new TextureRegion[6];
+        for (int i = 0; i < 6; i++) {
+            fireOffFrames[i] = new TextureRegion(fireOffTexture, i * offWidth, 0, offWidth, offHeight);
+        }
+        fireOffAnimation = new Animation<>(0.20f, fireOffFrames);
 
         resetGame();
     }
@@ -84,7 +106,7 @@ public class Main extends ApplicationAdapter {
     private void resetGame() {
         playerX = 850;
         playerY = 800;
-        fireHealth = 100f;
+        fireHealth = 0f;
         woodCount = 0;
         isGameOver = false;
         stateTime = 0;
@@ -92,12 +114,24 @@ public class Main extends ApplicationAdapter {
 
         boolean[][] occupied = new boolean[MAP_WIDTH][MAP_HEIGHT];
 
+        int fireTileX = 800 / TILE_SIZE;
+        int fireTileY = 800 / TILE_SIZE;
+        int MIN_DISTANCE_FROM_FIRE = 8;
+
         java.util.function.BiFunction<Integer, Integer, Boolean> isTooClose = (tx, ty) -> {
+
             for (int x = Math.max(0, tx - MIN_DISTANCE_TILES); x <= Math.min(MAP_WIDTH - 1, tx + MIN_DISTANCE_TILES); x++) {
                 for (int y = Math.max(0, ty - MIN_DISTANCE_TILES); y <= Math.min(MAP_HEIGHT - 1, ty + MIN_DISTANCE_TILES); y++) {
                     if (occupied[x][y]) return true;
                 }
             }
+
+            int dx = tx - fireTileX;
+            int dy = ty - fireTileY;
+            float distance = (float)Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < MIN_DISTANCE_FROM_FIRE) return true;
+
             return false;
         };
 
@@ -132,7 +166,7 @@ public class Main extends ApplicationAdapter {
 
         branches = new Array<>();
 
-        for (int i = 0; i < 120; i++) {
+        for (int i = 0; i < 320; i++) {
             int tileX = MathUtils.random(0, MAP_WIDTH - 1);
             int tileY = MathUtils.random(0, MAP_HEIGHT - 1);
 
@@ -144,6 +178,20 @@ public class Main extends ApplicationAdapter {
             float worldY = tileY * TILE_SIZE;
 
             branches.add(new Branch(worldX, worldY));
+        }
+
+        grasses = new Array<>();
+
+        for (int i = 0; i < 80; i++) {
+            int tileX = MathUtils.random(0, MAP_WIDTH - 1);
+            int tileY = MathUtils.random(0, MAP_HEIGHT - 1);
+
+            if (occupied[tileX][tileY]) continue;
+
+            float worldX = tileX * TILE_SIZE;
+            float worldY = tileY * TILE_SIZE;
+
+            grasses.add(new Grass(worldX, worldY));
         }
     }
 
@@ -173,8 +221,8 @@ public class Main extends ApplicationAdapter {
         if (camera.position.x > WORLD_WIDTH - halfWidth) camera.position.x = WORLD_WIDTH - halfWidth;
         if (camera.position.y > WORLD_HEIGHT - halfHeight) camera.position.y = WORLD_HEIGHT - halfHeight;
 
+        viewport.apply();
         camera.update();
-
         batch.setProjectionMatrix(camera.combined);
 
         batch.begin();
@@ -185,17 +233,26 @@ public class Main extends ApplicationAdapter {
             }
         }
 
+        for (Grass grass : grasses) {
+            batch.draw(grassTexture, grass.x, grass.y, 80, 80);
+        }
+
         for (Branch branch : branches) {
             if (!branch.collected) {
                 batch.draw(branchTexture, branch.drawX, branch.drawY, BRANCH_DRAW_SIZE, BRANCH_DRAW_SIZE);
             }
         }
 
-        TextureRegion currentFireFrame = fireAnimation.getKeyFrame(fireStateTime, true);
-
         float fireX = 800;
         float fireY = 800;
-        batch.draw(currentFireFrame, fireX, fireY, FIRE_DRAW_SIZE, FIRE_DRAW_SIZE);
+
+        if (fireHealth > 0) {
+            TextureRegion currentFireFrame = fireAnimation.getKeyFrame(fireStateTime, true);
+            batch.draw(currentFireFrame, fireX, fireY, FIRE_DRAW_SIZE, FIRE_DRAW_SIZE);
+        } else {
+            TextureRegion currentFireOffFrame = fireOffAnimation.getKeyFrame(fireStateTime, true);
+            batch.draw(currentFireOffFrame, fireX, fireY, FIRE_DRAW_SIZE, 140);
+        }
 
         for (Tree tree : trees) {
             if (tree.drawY >= playerY + 40) {
@@ -238,8 +295,6 @@ public class Main extends ApplicationAdapter {
         batch.end();
     }
 
-
-
     private void handleInput() {
 
         float hitboxWidth = 80;
@@ -276,7 +331,7 @@ public class Main extends ApplicationAdapter {
             }
         }
 
-        Rectangle fireRect = new Rectangle(1600 + 30, 1600 + 20, 10, 10);
+        Rectangle fireRect = new Rectangle(800 + 30, 800 + 20, 10, 10);
         if (futureX.overlaps(fireRect)) collisionX = true;
 
         if (!collisionX) {
@@ -302,7 +357,7 @@ public class Main extends ApplicationAdapter {
             }
         }
 
-        Rectangle fireRectY = new Rectangle(1600 + 30, 1600 + 20, 10, 10);
+        Rectangle fireRectY = new Rectangle(800 + 30, 800 + 20, 10, 10);
         if (futureY.overlaps(fireRectY)) collisionY = true;
 
         if (!collisionY) {
@@ -323,12 +378,23 @@ public class Main extends ApplicationAdapter {
 
             for (Branch branch : branches) {
                 if (!branch.collected && playerBounds.overlaps(branch.bounds)) {
-                    branch.collected = true;
-                    woodCount++;
-                    fireHealth += 20;
-                    if (fireHealth > 100) fireHealth = 100;
-                    break;
+                    if (carriedWood < maxWood) {
+                        branch.collected = true;
+                        branch.respawnTime = BRANCH_RESPAWN_TIME;
+                        carriedWood++;
+                    }
                 }
+            }
+        }
+
+        Rectangle playerBounds = new Rectangle(playerX, playerY, 120, 120);
+
+        if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+            if (playerBounds.overlaps(fireRect) && carriedWood > 0) {
+                fireHealth += carriedWood * 20;
+                if (fireHealth > 100) fireHealth = 100;
+                woodCount += carriedWood;
+                carriedWood = 0;
             }
         }
 
@@ -337,7 +403,21 @@ public class Main extends ApplicationAdapter {
 
     private void updateLogic() {
         fireHealth -= 1 * Gdx.graphics.getDeltaTime();
-        if (fireHealth <= 0) isGameOver = true;
+        if (fireHealth < 0) fireHealth = 0;
+
+        for (Branch branch : branches) {
+            if (branch.collected) {
+                branch.respawnTime -= Gdx.graphics.getDeltaTime();
+                if (branch.respawnTime <= 0) {
+                    branch.collected = false;
+                }
+            }
+        }
+    }
+
+    @Override
+    public void resize(int width, int height) {
+        viewport.update(width, height, true);
     }
 
     @Override
@@ -348,12 +428,15 @@ public class Main extends ApplicationAdapter {
         fireSheet.dispose();
         bgTexture.dispose();
         branchTexture.dispose();
+        fireOffTexture.dispose();
+        grassTexture.dispose();
     }
 
     static class Branch {
         public Rectangle bounds;
         public float drawX, drawY;
         public boolean collected = false;
+        public float respawnTime = 0f;
 
         public Branch(float x, float y) {
             this.drawX = x;
@@ -369,9 +452,8 @@ public class Main extends ApplicationAdapter {
             );
         }
     }
-}
 
-    class Tree {
+    static class Tree {
         public Rectangle bounds;
         public float drawX, drawY;
 
@@ -381,3 +463,13 @@ public class Main extends ApplicationAdapter {
             this.drawY = drawY;
         }
     }
+
+    static class Grass {
+        public float x, y;
+
+        public Grass(float x, float y) {
+            this.x = x;
+            this.y = y;
+        }
+    }
+}
