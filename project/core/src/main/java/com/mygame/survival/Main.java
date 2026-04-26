@@ -3,7 +3,10 @@ package com.mygame.survival;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
@@ -47,13 +50,14 @@ public class Main extends ApplicationAdapter {
     private boolean isMoving;
     private boolean facingRight = true;
 
-    private float fireHealth = 100f;
+    private float fireHealth = 0f;
     private int woodCount = 0;
     private int carriedWood = 0;
     private final int maxWood = 5;
     private float branchRespawnTimer = 0f;
     private final float branchRespawnTime = 60f;
     private boolean isGameOver = false;
+    private boolean fireHasBeenLit = false;
 
     private boolean showMenu = true;
     private boolean hasActiveRun = false;
@@ -80,6 +84,13 @@ public class Main extends ApplicationAdapter {
     private static final int BRANCH_DRAW_SIZE = 40;
     private final int fireDrawSize = 70;
     private final int minDistanceTiles = 8;
+
+    // Day / Night + simple lighting overlay (no shaders, no Box2D lights).
+    private float dayNightTimeSec = 0f;
+    private static final float DAY_LENGTH_SEC = 120f; // full cycle day->night->day
+    private final Color nightOverlayColor = new Color(0.05f, 0.08f, 0.14f, 1f);
+    private final Color tmpColor = new Color();
+    private Texture fireGlowTexture;
 
     @Override
     public void create() {
@@ -126,6 +137,7 @@ public class Main extends ApplicationAdapter {
         treeTexture = new Texture("tree.png");
         branchTexture = new Texture("branch.png");
         grassTexture = new Texture("grass.png");
+        fireGlowTexture = createRadialGlowTexture(256);
 
         resetGame();
         showMenu = true;
@@ -137,13 +149,15 @@ public class Main extends ApplicationAdapter {
     private void resetGame() {
         playerX = 1650;
         playerY = 1600;
-        fireHealth = 100f;
+        fireHealth = 0f;
         woodCount = 0;
         carriedWood = 0;
         isGameOver = false;
+        fireHasBeenLit = false;
         stateTime = 0;
         fireStateTime = 0;
         branchRespawnTimer = 0f;
+        dayNightTimeSec = 0f;
 
         boolean[][] occupied = new boolean[mapWidth][mapHeight];
 
@@ -283,7 +297,111 @@ public class Main extends ApplicationAdapter {
         }
         batch.end();
 
+        if (screenState == ScreenState.PLAYING) {
+            renderDayNightAndFireGlow();
+        }
+
         ui.render(batch, shapeRenderer, camera, viewport, titleFont, bodyFont, showMenu, continueEnabled, screenState == ScreenState.GAME_OVER, fireHealth, carriedWood, maxWood, screenState == ScreenState.PLAYING);
+    }
+
+    private void renderDayNightAndFireGlow() {
+        // Daylight factor: 1 = bright day, 0 = deep night.
+        float t = (dayNightTimeSec % DAY_LENGTH_SEC) / DAY_LENGTH_SEC; // 0..1
+        float daylight = 0.5f + 0.5f * MathUtils.cos(MathUtils.PI2 * t); // smooth cycle
+        daylight = MathUtils.clamp(daylight, 0f, 1f);
+
+        // Dark overlay alpha. Keep a bit of darkness even at day for mood, and cap at night.
+        float darkness = 1f - daylight;
+        float overlayAlpha = MathUtils.lerp(0.06f, 0.72f, darkness);
+
+        // Fullscreen-ish rect in world coords (cover current camera view).
+        float left = camera.position.x - camera.viewportWidth / 2f;
+        float bottom = camera.position.y - camera.viewportHeight / 2f;
+        float width = camera.viewportWidth;
+        float height = camera.viewportHeight;
+
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+
+        // 1) Darkness overlay (standard alpha blend).
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        tmpColor.set(nightOverlayColor);
+        tmpColor.a = overlayAlpha;
+        shapeRenderer.setColor(tmpColor);
+        shapeRenderer.rect(left, bottom, width, height);
+        shapeRenderer.end();
+
+        // 2) Fire glow on top (additive), stronger at night.
+        if (fireHealth > 0f) {
+            float fireX = 1600f + fireDrawSize / 2f;
+            float fireY = 1600f + fireDrawSize / 2f;
+
+            float health01 = MathUtils.clamp(fireHealth / 100f, 0f, 1f);
+            // Higher baseline intensity, gentler change over health/time.
+            float nightBoost = MathUtils.lerp(0.85f, 1.10f, darkness);
+            float flicker = 0.97f + 0.03f * MathUtils.sin(fireStateTime * 9.0f) + 0.02f * MathUtils.sin(fireStateTime * 16.0f);
+            float healthCurve = 0.55f + 0.45f * health01;
+            float intensity = healthCurve * nightBoost * flicker;
+            intensity = MathUtils.clamp(intensity, 0f, 0.5f);
+
+            // One textured radial glow => no rings/banding.
+            float baseRadius = 320f + 220f * intensity;
+            baseRadius = MathUtils.clamp(baseRadius, 320f, 920f);
+            float drawSize = baseRadius * 2f;
+
+            Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+            batch.begin();
+            // Warm tint, slightly brighter at night.
+            float tintBoost = MathUtils.lerp(0.75f, 1.10f, darkness);
+            float a = MathUtils.clamp(0.55f * intensity, 0f, 0.85f);
+            batch.setColor(1.0f * tintBoost, 0.62f * tintBoost, 0.20f * tintBoost, a);
+            batch.draw(
+                fireGlowTexture,
+                (fireX - drawSize / 2f),
+                (fireY + 10f - drawSize / 2f),
+                drawSize,
+                drawSize
+            );
+            batch.setColor(Color.WHITE);
+            batch.end();
+        }
+
+        // Restore default blending state expected by UI.
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+
+    private static Texture createRadialGlowTexture(int size) {
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pixmap.setBlending(Pixmap.Blending.None);
+        float cx = (size - 1) / 2f;
+        float cy = (size - 1) / 2f;
+        float maxR = Math.min(cx, cy);
+
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                float dx = (x - cx) / maxR;
+                float dy = (y - cy) / maxR;
+                float d = (float)Math.sqrt(dx * dx + dy * dy); // 0..~1.4
+                float t = MathUtils.clamp(d, 0f, 1f);          // 0..1 at edge
+
+                // Smoothstep-ish curve: bright center, very soft tail.
+                float alpha = 1f - t;
+                alpha = alpha * alpha;              // quadratic
+                alpha = alpha * (2f - alpha);       // smooth shaping
+                alpha = MathUtils.clamp(alpha, 0f, 1f);
+
+                // Store as white w/ alpha; we tint via batch color.
+                int a = (int)(255f * alpha);
+                // RGBA8888 packing is R<<24 | G<<16 | B<<8 | A.
+                pixmap.drawPixel(x, y, (0xFF << 24) | (0xFF << 16) | (0xFF << 8) | (a & 0xFF));
+            }
+        }
+
+        Texture tex = new Texture(pixmap);
+        tex.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        pixmap.dispose();
+        return tex;
     }
 
     private void handleInput() {
@@ -321,7 +439,7 @@ public class Main extends ApplicationAdapter {
         Rectangle futureY = new Rectangle(playerX + offsetX, newY + offsetY, hitboxWidth, hitboxHeight);
         boolean collisionY = false;
         for (Tree tree : trees) {
-                if (futureY.overlaps(tree.bounds)) { collisionY = true; break; }
+            if (futureY.overlaps(tree.bounds)) { collisionY = true; break; }
         }
         for (Branch branch : branches) {
             if (!branch.collected && futureY.overlaps(branch.bounds)) { collisionY = true; break; }
@@ -351,6 +469,7 @@ public class Main extends ApplicationAdapter {
             if (playerBounds.overlaps(fireRect) && carriedWood > 0) {
                 fireHealth += carriedWood * 20;
                 if (fireHealth > 100) fireHealth = 100;
+                fireHasBeenLit = true;
                 woodCount += carriedWood;
                 carriedWood = 0;
             }
@@ -385,8 +504,12 @@ public class Main extends ApplicationAdapter {
     }
 
     private void updateLogic() {
-        fireHealth -= 1 * Gdx.graphics.getDeltaTime();
-        if (fireHealth < 0) fireHealth = 0;
+        dayNightTimeSec += Gdx.graphics.getDeltaTime();
+
+        if (fireHasBeenLit && fireHealth > 0f) {
+            fireHealth -= 1 * Gdx.graphics.getDeltaTime();
+            if (fireHealth < 0) fireHealth = 0;
+        }
 
         for (Branch branch : branches) {
             if (branch.collected) {
@@ -397,13 +520,20 @@ public class Main extends ApplicationAdapter {
             }
         }
 
-        if (fireHealth <= 0f) {
+        if (isNightTime() && fireHealth <= 0f) {
             isGameOver = true;
             showMenu = true;
             screenState = ScreenState.GAME_OVER;
             continueEnabled = false;
         }
 
+    }
+
+    private boolean isNightTime() {
+        float t = (dayNightTimeSec % DAY_LENGTH_SEC) / DAY_LENGTH_SEC; // 0..1
+        float daylight = 0.5f + 0.5f * MathUtils.cos(MathUtils.PI2 * t);
+        // Consider it "night" when the overlay is clearly dark.
+        return daylight < 0.33f;
     }
 
     @Override
@@ -424,6 +554,7 @@ public class Main extends ApplicationAdapter {
         bgTexture.dispose();
         branchTexture.dispose();
         grassTexture.dispose();
+        if (fireGlowTexture != null) fireGlowTexture.dispose();
     }
 
     private static class Branch {
