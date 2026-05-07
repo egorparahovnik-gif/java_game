@@ -12,6 +12,7 @@ import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.mygame.survival.game.GameWorld;
 import com.mygame.survival.gfx.GameAssets;
+import com.mygame.survival.gfx.HudRenderer;
 import com.mygame.survival.gfx.WorldRenderer;
 import com.mygame.survival.input.PlayerController;
 import com.mygame.survival.ui.MenuScreen;
@@ -28,11 +29,13 @@ public class Main extends ApplicationAdapter {
     private GameWorld world;
     private PlayerController controller;
     private WorldRenderer renderer;
+    private HudRenderer hudRenderer;
 
     // ── Menu ──────────────────────────────────────────────────────────────
     private MenuScreen menuScreen;
     private GameState  gameState = GameState.MENU;
     private boolean restartOnExit = false;
+    private boolean solidMenuBackground = true;
 
     @Override
     public void create() {
@@ -56,6 +59,7 @@ public class Main extends ApplicationAdapter {
 
         controller = new PlayerController();
         renderer   = new WorldRenderer();
+        hudRenderer = new HudRenderer();
 
         menuScreen = new MenuScreen();
         menuScreen.create();
@@ -75,8 +79,6 @@ public class Main extends ApplicationAdapter {
             Gdx.input.setCursorCatched(true);
         }
         if (gameState == GameState.MENU) {
-            // draw last frame of the game (frozen)
-            renderGame(0f);
             renderMenu(dt);
         } else {
             renderGame(dt);
@@ -87,15 +89,11 @@ public class Main extends ApplicationAdapter {
 
     private void renderMenu(float dt) {
         // Render the game world in the background (paused – no update).
-        viewport.apply();
-        camera.update();
-        batch.setProjectionMatrix(camera.combined);
-        shapeRenderer.setProjectionMatrix(camera.combined);
-        renderer.render(batch, shapeRenderer, camera, viewport, assets, world);
+        renderWorldFrame();
 
         // Draw menu UI on top.
         boolean playPressed = menuScreen.update();
-        menuScreen.render(batch);
+        menuScreen.render(batch, solidMenuBackground);
 
         if (playPressed) {
             if (restartOnExit) {
@@ -106,6 +104,7 @@ public class Main extends ApplicationAdapter {
             // otherwise just resume
 
             gameState = GameState.PLAYING;
+            solidMenuBackground = false;
         }
     }
 
@@ -115,6 +114,7 @@ public class Main extends ApplicationAdapter {
         // ESC → open menu
         if (dt > 0 && Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
             restartOnExit = false; // just pause, not restart
+            solidMenuBackground = false;
             gameState = GameState.MENU;
             return;
         }
@@ -125,10 +125,14 @@ public class Main extends ApplicationAdapter {
         // If game is over, freeze world and open menu (do NOT reset here)
         if (world.gameOver) {
             restartOnExit = true; // next exit from menu should restart game
+            solidMenuBackground = true;
             gameState = GameState.MENU;
             return;
         }
+        renderWorldFrame();
+    }
 
+    private void renderWorldFrame() {
         renderer.updateCamera(camera, viewport, world);
 
         viewport.apply();
@@ -138,6 +142,7 @@ public class Main extends ApplicationAdapter {
         shapeRenderer.setProjectionMatrix(camera.combined);
 
         renderer.render(batch, shapeRenderer, camera, viewport, assets, world);
+        hudRenderer.renderHud(batch, shapeRenderer, bodyFont, assets, world);
     }
 
     @Override

@@ -190,4 +190,3 @@ public final class WorldRenderer {
         Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 }
-

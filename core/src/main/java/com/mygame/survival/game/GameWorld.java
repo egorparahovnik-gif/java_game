@@ -22,6 +22,7 @@ public final class GameWorld {
     public float dayNightTimeSec = 0f;
     public float fireAnimTimeSec = 0f;
     public boolean gameOver = false;
+    public int collectedLogsTotal = 0;
 
     public void reset() {
         player.x = 1650f;
@@ -39,6 +40,7 @@ public final class GameWorld {
         dayNightTimeSec = 0f;
         fireAnimTimeSec = 0f;
         gameOver = false;
+        collectedLogsTotal = 0;
 
         generateWorld();
     }
@@ -100,6 +102,10 @@ public final class GameWorld {
         float t = (dayNightTimeSec % GameConstants.DAY_LENGTH_SEC) / GameConstants.DAY_LENGTH_SEC; // 0..1
         float daylight = 0.5f + 0.5f * MathUtils.cos(MathUtils.PI2 * t);
         return daylight < 0.05f;
+    }
+
+    public int currentDayNumber() {
+        return (int) (dayNightTimeSec / GameConstants.DAY_LENGTH_SEC) + 1;
     }
 
     public float worldWidth() {

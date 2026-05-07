@@ -25,9 +25,9 @@ public final class GameConstants {
     // Campfire light constants
     public static final float CAMPFIRE_MAX_HEALTH = 100f;
     public static final float CAMPFIRE_MIN_LIGHT_RADIUS = 350f;
-    public static final float CAMPFIRE_MAX_LIGHT_RADIUS = 800f;
+    public static final float CAMPFIRE_MAX_LIGHT_RADIUS = 750f;
     public static final float CAMPFIRE_MIN_LIGHT_INTENSITY = 0.25f;
-    public static final float CAMPFIRE_MAX_LIGHT_INTENSITY = 0.60f;
+    public static final float CAMPFIRE_MAX_LIGHT_INTENSITY = 0.65f;
 
     public static final int MAX_CARRIED_WOOD = 1;
     public static final float BRANCH_RESPAWN_TIME_SEC = 120f;
@@ -52,15 +52,15 @@ public final class GameConstants {
     public static final float BERRY_RESPAWN_TIME_SEC = 120f;
 
     // Hunger system constants
-    public static final float MAX_HUNGER = 120f;
+    public static final float MAX_HUNGER = 100f;
     public static final float HUNGER_DRAIN_RATE = 1f; // за 20 секунд голод опустится на MAX_HUNGER
-    public static final float HUNGER_RESTORE = 24f; // сколько восполняет одна ягода
+    public static final float HUNGER_RESTORE = 20f; // сколько восполняет одна ягода
     public static final float GAME_OVER_HUNGER_THRESHOLD = 0f;
     
     // Health system constants
-    public static final float MAX_HEALTH = 120f;
-    public static final float HEALTH_DAMAGE_RATE = 4f; // урон в секунду при нулевом голоде
-    public static final float HEALTH_RESTORE = 24f;
+    public static final float MAX_HEALTH = 100f;
+    public static final float HEALTH_DAMAGE_RATE = 5f; // урон в секунду при нулевом голоде
+    public static final float HEALTH_RESTORE = 20f;
     public static final float HUNGER_SLOWDOWN_THRESHOLD = 0f; // при этом голоде персонаж замедляется
     public static final float SLOWDOWN_MULTIPLIER = 0.7f; // множитель скорости при голоде
 

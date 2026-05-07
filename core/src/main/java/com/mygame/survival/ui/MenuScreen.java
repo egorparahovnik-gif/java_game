@@ -51,11 +51,14 @@ public final class MenuScreen {
     private static final float WIN_SCALE = 4f; // pixel scale for window
     private static final float WIN_W = PANEL_SRC_W * WIN_SCALE; // 320
     private static final float WIN_H = PANEL_SRC_H * WIN_SCALE; // 256
+    private static final Color SOLID_BACKGROUND_COLOR = new Color(0.80f, 0.74f, 0.60f, 1f);
+    private static final Color VIGNETTE_COLOR = new Color(0.12f, 0.08f, 0.05f, 1f);
 
     // Button is rendered at 3× (gives 288×96) – a bit large, so we trim height.
     private static final float BTN_SCALE = 1.2f;
     private static final float BTN_W = BTN_SRC_W * BTN_SCALE; // 288
     private static final float BTN_H = BTN_SRC_H * BTN_SCALE; // 96
+    private static final float MENU_SHIFT_X = -5f;
 
     // ── state ─────────────────────────────────────────────────────────────
     private Texture sheet;
@@ -70,6 +73,7 @@ public final class MenuScreen {
     private final Rectangle btnRect = new Rectangle();
 
     private boolean playClicked = false;
+    private boolean pressed = false;
 
     // ── life-cycle ────────────────────────────────────────────────────────
 
@@ -121,7 +125,7 @@ public final class MenuScreen {
             winW = winH * aspect;
         }
 
-        float winX = (screenW - winW) / 2f;
+        float winX = menuWindowX(screenW, winW);
         float winY = (screenH - winH) / 2f;
 
         float btnX = winX + winW / 2f - BTN_W / 2f + 10f;
@@ -129,15 +133,20 @@ public final class MenuScreen {
 
         btnRect.set(btnX, btnY, BTN_W, BTN_H);
 
-        if (Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
+        if (Gdx.input.isButtonPressed(Input.Buttons.LEFT)) {
             if (btnRect.contains(tmpVec.x, tmpVec.y)) {
+                pressed = true;
+            }
+        } else {
+            if (pressed && btnRect.contains(tmpVec.x, tmpVec.y)) {
                 playClicked = true;
             }
+            pressed = false;
         }
         return playClicked;
     }
 
-    public void render(SpriteBatch batch) {
+    public void render(SpriteBatch batch, boolean solidBackground) {
         float screenW = viewport.getWorldWidth();
         float screenH = viewport.getWorldHeight();
 
@@ -152,7 +161,7 @@ public final class MenuScreen {
             winW = winH * aspect;
         }
 
-        float winX = (screenW - winW) / 2f;
+        float winX = menuWindowX(screenW, winW);
         float winY = (screenH - winH) / 2f;
 
         float btnX = winX + winW / 2f - BTN_W / 2f + 3f;
@@ -162,7 +171,7 @@ public final class MenuScreen {
         viewport.unproject(tmpVec);
         boolean hovered = btnRect.contains(tmpVec.x, tmpVec.y);
 
-        // ── full-screen dark overlay ──────────────────────────────────────
+        // ── full-screen background ────────────────────────────────────────
         float sw = viewport.getWorldWidth();
         float sh = viewport.getWorldHeight();
 
@@ -170,8 +179,13 @@ public final class MenuScreen {
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(0f, 0f, 0f, 0.6f);
+        if (solidBackground) {
+            shapeRenderer.setColor(SOLID_BACKGROUND_COLOR);
+        } else {
+            shapeRenderer.setColor(0f, 0f, 0f, 0.6f);
+        }
         shapeRenderer.rect(0, 0, sw, sh);
+        drawVignette(shapeRenderer, sw, sh);
         shapeRenderer.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
@@ -190,10 +204,11 @@ public final class MenuScreen {
         batch.draw(panelRegion, winX, winY, winW, winH);
 
         // Play button
-        if (hovered) {
-            float scaleExtra = 1.08f;
-            float bwS = BTN_W * scaleExtra;
-            float bhS = BTN_H * scaleExtra;
+        if (pressed && hovered) {
+            // pressed state (slightly smaller)
+            float scale = 0.92f;
+            float bwS = BTN_W * scale;
+            float bhS = BTN_H * scale;
             batch.draw(btnHover,
                     btnX - (bwS - BTN_W) / 2f,
                     btnY - (bhS - BTN_H) / 2f,
@@ -208,5 +223,35 @@ public final class MenuScreen {
     public void dispose() {
         if (sheet != null) sheet.dispose();
         if (shapeRenderer != null) shapeRenderer.dispose();
+    }
+
+    private float menuWindowX(float screenW, float winW) {
+        return (screenW - winW) / 2f + MENU_SHIFT_X;
+    }
+
+    private void drawVignette(ShapeRenderer shapeRenderer, float screenW, float screenH) {
+        float thickness1 = Math.min(screenW, screenH) * 0.07f;
+        float thickness2 = thickness1 * 0.88f;
+        float thickness3 = thickness1 * 0.76f;
+        float thickness4 = thickness1 * 0.62f;
+
+        // Very soft layered vignette to keep the center bright and the edges subdued.
+        drawVignetteLayer(shapeRenderer, screenW, screenH, thickness1, 0.040f);
+        drawVignetteLayer(shapeRenderer, screenW, screenH, thickness2, 0.060f);
+        drawVignetteLayer(shapeRenderer, screenW, screenH, thickness3, 0.080f);
+        drawVignetteLayer(shapeRenderer, screenW, screenH, thickness4, 0.100f);
+    }
+
+    private void drawVignetteLayer(ShapeRenderer shapeRenderer, float screenW, float screenH, float thickness, float alpha) {
+        float t = Math.max(0f, thickness);
+        if (t <= 0f) {
+            return;
+        }
+
+        shapeRenderer.setColor(VIGNETTE_COLOR.r, VIGNETTE_COLOR.g, VIGNETTE_COLOR.b, alpha);
+        shapeRenderer.rect(0f, 0f, screenW, t);
+        shapeRenderer.rect(0f, screenH - t, screenW, t);
+        shapeRenderer.rect(0f, 0f, t, screenH);
+        shapeRenderer.rect(screenW - t, 0f, t, screenH);
     }
 }

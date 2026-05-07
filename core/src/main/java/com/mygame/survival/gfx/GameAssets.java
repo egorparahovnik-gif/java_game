@@ -7,11 +7,13 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
 
 public final class GameAssets {
+
     public Texture bgTexture;
     public Texture treeTexture;
     public Texture branchTexture;
     public Texture grassTexture;
     public Texture berryTexture;
+    public Texture uiTexture;
 
     public Texture walkSheet;
     public Texture fireSheet;
@@ -21,6 +23,8 @@ public final class GameAssets {
 
     public Animation<TextureRegion> walkAnimation;
     public TextureRegion idleFrame;
+    public TextureRegion hudPanelLeft;
+    public TextureRegion hudPanelWide;
 
     public Animation<TextureRegion> fireAnimation;
     public Animation<TextureRegion> fireOffAnimation;
@@ -31,6 +35,10 @@ public final class GameAssets {
         branchTexture = new Texture("branch.png");
         grassTexture = new Texture("grass.png");
         berryTexture = new Texture("berries_bush.png");
+        uiTexture = new Texture("ui_menu.png");
+        uiTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        hudPanelLeft = new TextureRegion(uiTexture, 6, 166, 91, 82);
+        hudPanelWide = new TextureRegion(uiTexture, 6, 166, 91, 110);
 
         walkSheet = new Texture("player_walk_sheet.png");
         TextureRegion[] walkFrames = splitHorizontal(walkSheet, 6);
@@ -55,6 +63,7 @@ public final class GameAssets {
         if (branchTexture != null) branchTexture.dispose();
         if (grassTexture != null) grassTexture.dispose();
         if (berryTexture != null) berryTexture.dispose();
+        if (uiTexture != null) uiTexture.dispose();
         if (walkSheet != null) walkSheet.dispose();
         if (fireSheet != null) fireSheet.dispose();
         if (fireOffSheet != null) fireOffSheet.dispose();
@@ -106,4 +115,3 @@ public final class GameAssets {
         return q;
     }
 }
-

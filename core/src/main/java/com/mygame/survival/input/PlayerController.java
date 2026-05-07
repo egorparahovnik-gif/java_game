@@ -78,6 +78,7 @@ public final class PlayerController {
             branch.collected = true;
             branch.respawnTimeSec = GameConstants.BRANCH_RESPAWN_TIME_SEC;
             world.player.carriedWood++;
+            world.collectedLogsTotal++;
         }
 
         if (playerBounds.overlaps(world.campfire.blockBounds) && world.player.carriedWood > 0) {
@@ -90,4 +91,3 @@ public final class PlayerController {
         return Math.max(min, Math.min(max, v));
     }
 }
-
